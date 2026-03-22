@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Address, createClient } from "@evolution-sdk/evolution";
+import { AddFundsModal } from "./components/add-funds-modal";
 import { FundModal } from "./components/fund-modal";
 import { OsiPanel } from "./components/osi-panel";
 import { SiteHeader } from "./components/site-header";
@@ -20,6 +21,11 @@ type WalletApiLike = {
 type BrowserWallet = {
   enable: () => Promise<WalletApiLike>;
   isEnabled?: () => Promise<boolean>;
+};
+
+type ApiPayload = {
+  txHash?: string;
+  error?: string;
 };
 
 declare global {
@@ -81,8 +87,20 @@ export default function HomePage() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFunding, setIsFunding] = useState(false);
+  const [isAddingFunds, setIsAddingFunds] = useState(false);
+  const [addingFundsOutRef, setAddingFundsOutRef] = useState<string | null>(
+    null,
+  );
+  const [isPayingOut, setIsPayingOut] = useState(false);
+  const [payingOutRef, setPayingOutRef] = useState<string | null>(null);
   const [fundStatus, setFundStatus] = useState<string | null>(null);
+  const [addFundsStatus, setAddFundsStatus] = useState<string | null>(null);
+  const [payoutStatus, setPayoutStatus] = useState<string | null>(null);
   const [isFundModalOpen, setIsFundModalOpen] = useState(false);
+  const [isAddFundsModalOpen, setIsAddFundsModalOpen] = useState(false);
+  const [selectedOutRefForAddFunds, setSelectedOutRefForAddFunds] = useState<
+    string | null
+  >(null);
   const [connectedAddressLabel, setConnectedAddressLabel] =
     useState("Connect Wallet");
 
@@ -181,6 +199,26 @@ export default function HomePage() {
     setIsFundModalOpen(true);
   }, []);
 
+  const openAddFundsModal = useCallback((outRef: string) => {
+    setSelectedOutRefForAddFunds(outRef);
+    setIsAddFundsModalOpen(true);
+  }, []);
+
+  const parseApiResponse = useCallback(async (response: Response) => {
+    const rawText = await response.text();
+    let payload: ApiPayload | undefined;
+
+    if (rawText.trim().length > 0) {
+      try {
+        payload = JSON.parse(rawText) as ApiPayload;
+      } catch {
+        payload = undefined;
+      }
+    }
+
+    return { payload, rawText };
+  }, []);
+
   const submitFundFromModal = useCallback(
     async (amountInput: string, deadlineInput: string): Promise<void> => {
       if (!/^\d+$/.test(amountInput.trim()) || amountInput.trim() === "0") {
@@ -224,12 +262,14 @@ export default function HomePage() {
           },
         );
 
-        const payload = (await response.json()) as
-          | { txHash?: string; error?: string }
-          | undefined;
+        const { payload, rawText } = await parseApiResponse(response);
 
         if (!response.ok) {
-          throw new Error(payload?.error || "Fund request failed");
+          const snippet = rawText.slice(0, 120).replace(/\s+/g, " ");
+          throw new Error(
+            payload?.error ||
+              `Fund request failed (${response.status}). ${snippet}`,
+          );
         }
 
         const txHash = payload?.txHash;
@@ -248,7 +288,115 @@ export default function HomePage() {
         setIsFunding(false);
       }
     },
-    [loadOsis, offChainApiBaseUrl, todayDateString],
+    [loadOsis, offChainApiBaseUrl, parseApiResponse, todayDateString],
+  );
+
+  const submitAddFundsFromModal = useCallback(
+    async (amountInput: string): Promise<void> => {
+      if (!selectedOutRefForAddFunds) {
+        setAddFundsStatus("Add funds failed: no target UTxO selected.");
+        return;
+      }
+
+      if (!/^\d+$/.test(amountInput.trim()) || amountInput.trim() === "0") {
+        setAddFundsStatus("Add funds failed: amount must be a positive integer.");
+        return;
+      }
+
+      setIsAddingFunds(true);
+      setAddingFundsOutRef(selectedOutRefForAddFunds);
+      setIsAddFundsModalOpen(false);
+      setAddFundsStatus(`Adding funds to ${selectedOutRefForAddFunds}...`);
+
+      try {
+        const response = await fetch(
+          `${offChainApiBaseUrl}/api/validator-utxos/add-funds`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              outRef: selectedOutRefForAddFunds,
+              additionalFundingLovelace: amountInput.trim(),
+            }),
+          },
+        );
+
+        const { payload, rawText } = await parseApiResponse(response);
+
+        if (!response.ok) {
+          const snippet = rawText.slice(0, 120).replace(/\s+/g, " ");
+          throw new Error(
+            payload?.error ||
+              `Add funds request failed (${response.status}). ${snippet}`,
+          );
+        }
+
+        setAddFundsStatus(
+          payload?.txHash
+            ? `Funds added. Tx: ${payload.txHash}`
+            : "Funds added successfully.",
+        );
+
+        await loadOsis();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to add funds";
+        setAddFundsStatus(`Add funds failed: ${message}`);
+      } finally {
+        setIsAddingFunds(false);
+        setAddingFundsOutRef(null);
+      }
+    },
+    [loadOsis, offChainApiBaseUrl, parseApiResponse, selectedOutRefForAddFunds],
+  );
+
+  const handlePayout = useCallback(
+    async (outRef: string): Promise<void> => {
+      setIsPayingOut(true);
+      setPayingOutRef(outRef);
+      setPayoutStatus(`Submitting payout for ${outRef}...`);
+
+      try {
+        const response = await fetch(
+          `${offChainApiBaseUrl}/api/validator-utxos/spend`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ outRef }),
+          },
+        );
+
+        const { payload, rawText } = await parseApiResponse(response);
+
+        if (!response.ok) {
+          const snippet = rawText.slice(0, 120).replace(/\s+/g, " ");
+          throw new Error(
+            payload?.error ||
+              `Payout request failed (${response.status}). ${snippet}`,
+          );
+        }
+
+        setPayoutStatus(
+          payload?.txHash
+            ? `Payout submitted. Tx: ${payload.txHash}`
+            : "Payout submitted successfully.",
+        );
+
+        await loadOsis();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to submit payout";
+        setPayoutStatus(`Payout failed: ${message}`);
+      } finally {
+        setIsPayingOut(false);
+        setPayingOutRef(null);
+      }
+    },
+    [loadOsis, offChainApiBaseUrl, parseApiResponse],
   );
 
   return (
@@ -269,9 +417,21 @@ export default function HomePage() {
           onFund={() => {
             openFundModal();
           }}
+          onAddFunds={(outRef) => {
+            openAddFundsModal(outRef);
+          }}
+          onPayout={(outRef) => {
+            void handlePayout(outRef);
+          }}
           canFund={isWalletConnected}
           isFunding={isFunding}
+          isAddingFunds={isAddingFunds}
+          addingFundsOutRef={addingFundsOutRef}
+          isPayingOut={isPayingOut}
+          payingOutRef={payingOutRef}
           fundStatus={fundStatus}
+          addFundsStatus={addFundsStatus}
+          payoutStatus={payoutStatus}
         />
       </main>
 
@@ -284,6 +444,19 @@ export default function HomePage() {
         }}
         onSubmit={(amount, deadline) => {
           void submitFundFromModal(amount, deadline);
+        }}
+      />
+
+      <AddFundsModal
+        isOpen={isAddFundsModalOpen}
+        outRef={selectedOutRefForAddFunds}
+        isSubmitting={isAddingFunds}
+        onClose={() => {
+          setIsAddFundsModalOpen(false);
+          setSelectedOutRefForAddFunds(null);
+        }}
+        onSubmit={(amount) => {
+          void submitAddFundsFromModal(amount);
         }}
       />
     </div>

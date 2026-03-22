@@ -6,18 +6,34 @@ type OsiPanelProps = {
   osiStatus: string;
   osiRows: OsiRow[];
   onFund: () => void;
+  onAddFunds: (outRef: string) => void;
+  onPayout: (outRef: string) => void;
   canFund: boolean;
   isFunding: boolean;
+  isAddingFunds: boolean;
+  addingFundsOutRef: string | null;
+  isPayingOut: boolean;
+  payingOutRef: string | null;
   fundStatus: string | null;
+  addFundsStatus: string | null;
+  payoutStatus: string | null;
 };
 
 export function OsiPanel({
   osiStatus,
   osiRows,
   onFund,
+  onAddFunds,
+  onPayout,
   canFund,
   isFunding,
+  isAddingFunds,
+  addingFundsOutRef,
+  isPayingOut,
+  payingOutRef,
   fundStatus,
+  addFundsStatus,
+  payoutStatus,
 }: Readonly<OsiPanelProps>) {
   const hasRows = osiRows.length > 0;
 
@@ -38,6 +54,8 @@ export function OsiPanel({
 
       <p className="osi-status">{osiStatus}</p>
       {fundStatus ? <p className="fund-status">{fundStatus}</p> : null}
+      {addFundsStatus ? <p className="fund-status">{addFundsStatus}</p> : null}
+      {payoutStatus ? <p className="fund-status">{payoutStatus}</p> : null}
 
       {hasRows && (
         <ul className="osi-list">
@@ -49,13 +67,28 @@ export function OsiPanel({
                   Lovelace: {row.lovelace} | Datum: {row.datumKind}
                 </span>
               </div>
-              <button
-                className="action-button payout-button"
-                type="button"
-                disabled={!canFund}
-              >
-                Payout
-              </button>
+              <div className="osi-item-actions">
+                <button
+                  className="action-button add-funds-button"
+                  type="button"
+                  onClick={() => {
+                    onAddFunds(row.outRef);
+                  }}
+                  disabled={!canFund || isAddingFunds || isPayingOut}
+                >
+                  {addingFundsOutRef === row.outRef ? "Adding..." : "Add Funds"}
+                </button>
+                <button
+                  className="action-button payout-button"
+                  type="button"
+                  onClick={() => {
+                    onPayout(row.outRef);
+                  }}
+                  disabled={!canFund || isPayingOut || isAddingFunds}
+                >
+                  {payingOutRef === row.outRef ? "Paying..." : "Payout"}
+                </button>
+              </div>
             </li>
           ))}
         </ul>

@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 
+import { addFundValidatorUtxo } from "./services/add-fund-validator-utxo.ts";
 import { createValidatorUtxo } from "./services/create-validator-utxo.ts";
 
 const app = express();
@@ -38,6 +39,32 @@ app.post("/api/validator-utxos", async (req, res) => {
       error instanceof Error
         ? error.message
         : "Failed to create validator UTxO";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/validator-utxos/add-funds", async (req, res) => {
+  try {
+    const outRef =
+      typeof req.body?.outRef === "string" ? req.body.outRef : undefined;
+    const additionalFundingRaw = req.body?.additionalFundingLovelace;
+
+    if (additionalFundingRaw === undefined) {
+      res.status(400).json({ error: "Missing additionalFundingLovelace" });
+      return;
+    }
+
+    const result = await addFundValidatorUtxo({
+      additionalFundingLovelace: BigInt(additionalFundingRaw),
+      outRef,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to add funds to validator UTxO";
     res.status(500).json({ error: message });
   }
 });
