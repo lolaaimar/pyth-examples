@@ -3,17 +3,21 @@
 import type { OsiRow } from "../types";
 
 type OsiPanelProps = {
-  validatorAddress: string;
   osiStatus: string;
   osiRows: OsiRow[];
-  isWalletConnected: boolean;
+  onFund: () => void;
+  canFund: boolean;
+  isFunding: boolean;
+  fundStatus: string | null;
 };
 
 export function OsiPanel({
-  validatorAddress,
   osiStatus,
   osiRows,
-  isWalletConnected,
+  onFund,
+  canFund,
+  isFunding,
+  fundStatus,
 }: Readonly<OsiPanelProps>) {
   const hasRows = osiRows.length > 0;
 
@@ -25,13 +29,15 @@ export function OsiPanel({
           id="fund-button"
           className="action-button"
           type="button"
-          disabled={!isWalletConnected}
+          onClick={onFund}
+          disabled={!canFund || isFunding}
         >
-          New Fund
+          {isFunding ? "Funding..." : "New Fund"}
         </button>
       </div>
 
       <p className="osi-status">{osiStatus}</p>
+      {fundStatus ? <p className="fund-status">{fundStatus}</p> : null}
 
       {hasRows && (
         <ul className="osi-list">
@@ -46,7 +52,7 @@ export function OsiPanel({
               <button
                 className="action-button payout-button"
                 type="button"
-                disabled={!isWalletConnected}
+                disabled={!canFund}
               >
                 Payout
               </button>

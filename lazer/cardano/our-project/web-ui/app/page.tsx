@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Address, createClient } from "@evolution-sdk/evolution";
+import { FundModal } from "./components/fund-modal";
 import { OsiPanel } from "./components/osi-panel";
 import { SiteHeader } from "./components/site-header";
 import type { OsiRow } from "./types";
@@ -72,13 +73,26 @@ export default function HomePage() {
     "https://cardano-preprod.blockfrost.io/api/v0";
   const blockfrostProjectId =
     process.env.NEXT_PUBLIC_BLOCKFROST_PROJECT_ID || "";
+  const offChainApiBaseUrl =
+    process.env.NEXT_PUBLIC_OFF_CHAIN_API_BASE_URL || "http://localhost:8787";
 
   const [osiRows, setOsiRows] = useState<OsiRow[]>([]);
   const [osiStatus, setOsiStatus] = useState("Loading OSIs from chain...");
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isFunding, setIsFunding] = useState(false);
+  const [fundStatus, setFundStatus] = useState<string | null>(null);
+  const [isFundModalOpen, setIsFundModalOpen] = useState(false);
   const [connectedAddressLabel, setConnectedAddressLabel] =
     useState("Connect Wallet");
+
+  const todayDateString = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
 
   const loadOsis = useCallback(async (): Promise<void> => {
     if (!validatorAddress) {
@@ -163,6 +177,80 @@ export default function HomePage() {
     }
   }, []);
 
+  const openFundModal = useCallback(() => {
+    setIsFundModalOpen(true);
+  }, []);
+
+  const submitFundFromModal = useCallback(
+    async (amountInput: string, deadlineInput: string): Promise<void> => {
+      if (!/^\d+$/.test(amountInput.trim()) || amountInput.trim() === "0") {
+        setFundStatus("Funding failed: amount must be a positive integer.");
+        return;
+      }
+
+      const deadlineDate = new Date(`${deadlineInput}T23:59:59`);
+      const selectedDateOnly = new Date(`${deadlineInput}T00:00:00`);
+      const todayDateOnly = new Date(`${todayDateString}T00:00:00`);
+
+      if (Number.isNaN(deadlineDate.getTime())) {
+        setFundStatus("Funding failed: invalid deadline format.");
+        return;
+      }
+
+      if (selectedDateOnly.getTime() < todayDateOnly.getTime()) {
+        setFundStatus("Funding failed: deadline cannot be before today.");
+        return;
+      }
+
+      const fundingLovelace = amountInput.trim();
+      const deadline = deadlineDate.getTime().toString();
+
+      setIsFunding(true);
+      setIsFundModalOpen(false);
+      setFundStatus("Submitting fund transaction...");
+
+      try {
+        const response = await fetch(
+          `${offChainApiBaseUrl}/api/validator-utxos`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              fundingLovelace,
+              deadline,
+            }),
+          },
+        );
+
+        const payload = (await response.json()) as
+          | { txHash?: string; error?: string }
+          | undefined;
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Fund request failed");
+        }
+
+        const txHash = payload?.txHash;
+        setFundStatus(
+          txHash
+            ? `Fund created successfully. Tx: ${txHash}`
+            : "Fund created successfully.",
+        );
+
+        await loadOsis();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to create fund";
+        setFundStatus(`Funding failed: ${message}`);
+      } finally {
+        setIsFunding(false);
+      }
+    },
+    [loadOsis, offChainApiBaseUrl, todayDateString],
+  );
+
   return (
     <div className="page-shell">
       <SiteHeader
@@ -176,12 +264,28 @@ export default function HomePage() {
 
       <main className="content-area">
         <OsiPanel
-          validatorAddress={validatorAddress}
           osiStatus={osiStatus}
           osiRows={osiRows}
-          isWalletConnected={isWalletConnected}
+          onFund={() => {
+            openFundModal();
+          }}
+          canFund={isWalletConnected}
+          isFunding={isFunding}
+          fundStatus={fundStatus}
         />
       </main>
+
+      <FundModal
+        isOpen={isFundModalOpen}
+        minDate={todayDateString}
+        isSubmitting={isFunding}
+        onClose={() => {
+          setIsFundModalOpen(false);
+        }}
+        onSubmit={(amount, deadline) => {
+          void submitFundFromModal(amount, deadline);
+        }}
+      />
     </div>
   );
 }
