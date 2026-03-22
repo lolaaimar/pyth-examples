@@ -16,5 +16,5 @@ pub type OsiDatum {
 
 pub type OsiRedeemers {
   Fund
-  Payout { signature: Signature, feeds: PriceUpdate }
+  Payout
 }
