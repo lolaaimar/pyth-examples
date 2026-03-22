@@ -6,6 +6,7 @@
       "name": "off-chain",
       "dependencies": {
         "@evolution-sdk/evolution": "^0.3.30",
+        "@pythnetwork/pyth-lazer-cardano-js": "^0.1.0",
         "@pythnetwork/pyth-lazer-sdk": "^6.2.1",
         "dotenv": "^17.3.1",
       },
@@ -81,6 +82,8 @@
     "@parcel/watcher-win32-ia32": ["@parcel/watcher-win32-ia32@2.5.6", "", { "os": "win32", "cpu": "ia32" }, "sha512-k35yLp1ZMwwee3Ez/pxBi5cf4AoBKYXj00CZ80jUz5h8prpiaQsiRPKQMxoLstNuqe2vR4RNPEAEcjEFzhEz/g=="],
 
     "@parcel/watcher-win32-x64": ["@parcel/watcher-win32-x64@2.5.6", "", { "os": "win32", "cpu": "x64" }, "sha512-hbQlYcCq5dlAX9Qx+kFb0FHue6vbjlf0FrNzSKdYK2APUf7tGfGxQCk2ihEREmbR6ZMc0MVAD5RIX/41gpUzTw=="],
+
+    "@pythnetwork/pyth-lazer-cardano-js": ["@pythnetwork/pyth-lazer-cardano-js@0.1.0", "", { "dependencies": { "@evolution-sdk/evolution": "^0.3.29" } }, "sha512-KfddoNfkRf+a6Qqf1zKGkMyKK9Mgib6P5hLVApc6qB3XpLkzk9GfPLOc9q2uqCF0EOjzPRDRTMF9beKMxyAK4Q=="],
 
     "@pythnetwork/pyth-lazer-sdk": ["@pythnetwork/pyth-lazer-sdk@6.2.1", "", { "dependencies": { "@isaacs/ttlcache": "^1.4.1", "buffer": "^6.0.3", "isomorphic-ws": "^5.0.0", "ts-log": "^2.2.7", "ws": "^8.19.0" } }, "sha512-+d+ATApOBF5z3YvqwP/5R42xr9vWpLOvbAFWDWldYiltlH8eU9PaGgeczgCs3it3STpnL+8jTXsUBhqv9T94Aw=="],
 
