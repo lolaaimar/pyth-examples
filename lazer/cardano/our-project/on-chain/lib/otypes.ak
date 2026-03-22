@@ -1,7 +1,5 @@
-use aiken/crypto.{Signature}
 use cardano/address.{PaymentCredential}
 use cardano/assets.{AssetName, PolicyId}
-use pyth.{PriceUpdate}
 
 pub type AssetClass {
   policy_id: PolicyId,
@@ -9,9 +7,8 @@ pub type AssetClass {
 }
 
 pub type OsiDatum {
-  timestamp: Int,
+  deadline: Int,
   payees: Pairs<PaymentCredential, Int>,
-  quote_token: AssetClass,
 }
 
 pub type OsiRedeemers {
