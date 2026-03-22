@@ -149,8 +149,7 @@ try {
       : 0n;
 
   const txHash = await builder
-    .build({
-    })
+    .build({})
     .then((built) => built.sign())
     .then((signed) => signed.submit());
 

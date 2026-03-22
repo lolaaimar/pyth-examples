@@ -83,7 +83,7 @@ export async function loadRuntimeFromEnv(): Promise<OsiRuntime> {
   const pythPolicyId = readRequiredEnv("PYTH_POLICY_ID");
   const feedId = ADA_USD_FEED_ID;
   const queryFeedIds = [ADA_USD_FEED_ID, USDT_USD_FEED_ID];
-  const fundingLovelace = 2000_000_000n;
+  const fundingLovelace = 500_000_000n;
   const providerConfig = readProviderConfig();
   const client = createSigningClientFromEnv(network, providerConfig);
   const providerClient = createProviderOnlyClient(network, providerConfig);
