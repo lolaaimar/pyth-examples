@@ -1,6 +1,6 @@
 use aiken/interval
 use aiken/math/rational
-use cardano/address.{Script, Credential}
+use cardano/address.{Credential, Script}
 use cardano/assets.{PolicyId, lovelace_of}
 use cardano/transaction.{
   Output, OutputReference, Transaction, find_script_outputs,
@@ -65,29 +65,25 @@ validator oracle_settled_invoice(pyth_policy: PolicyId, base_currency: Int) {
           // Base currency feed must match the expected base asset id
           trace_if_false(
             (quote_feed_id == from_int(base_currency))?,
-            @"Base currency feed does not match expected base asset id"
+            @"Base currency feed does not match expected base asset id",
           ),
           // Price feed must be updated within the transaction's validity range
           trace_if_false(
             (tx.validity_range
               |> interval.contains(u64.as_int(price_update.timestamp_us)))?,
-            @"Price feed not updated within transaction validity range"
+            @"Price feed not updated within transaction validity range",
           ),
           // Payment must be made before the deadline
           trace_if_false(
             (tx.validity_range
               |> interval.is_entirely_before(deadline))?,
-            @"Payment not made before the deadline"
+            @"Payment not made before the deadline",
           ),
           // Payouts must be made to the correct addresses with the correct amounts
           trace_if_false(
-            payouts_match_outputs(
-              payees,
-              outputs,
-              quote_multiplier,
-            )?,
-            @"Payouts do not match expected values based on the price feed"
-          )
+            payouts_match_outputs(payees, outputs, quote_multiplier)?,
+            @"Payouts do not match expected values based on the price feed",
+          ),
         }
       }
     }
@@ -123,11 +119,7 @@ fn payouts_match_outputs(
           and {
             address.payment_credential == payee,
             lovelace_of(value) >= rational.floor(expected_payout),
-            payouts_match_outputs(
-              rest_payees,
-              rest_outputs,
-              quote_multiplier,
-            ),
+            payouts_match_outputs(rest_payees, rest_outputs, quote_multiplier),
           }
         }
       }

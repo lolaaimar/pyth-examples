@@ -7,7 +7,7 @@ pub fn quote_price_multiplier(
   base_exponent: Int,
   quote_price: Int,
   quote_exponent: Int,
-  ) -> Rational {
+) -> Rational {
   expect Some(multiplier) =
     rational.from_int(10) |> rational.pow(base_exponent - quote_exponent)
 
