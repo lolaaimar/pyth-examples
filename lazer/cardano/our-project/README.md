@@ -8,7 +8,7 @@ Oracle-Settled Invoice is a Cardano escrow that locks one asset and settles a li
 
 ```bash
 cd on-chain
-aiken build -t verbose -f all
+aiken build
 ```
 
 ### 2. Install off-chain deps
