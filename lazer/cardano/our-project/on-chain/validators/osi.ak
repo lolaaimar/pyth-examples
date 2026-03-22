@@ -1,40 +1,20 @@
 use aiken/collection/list
 use aiken/collection/pairs
-use aiken/option
-use cardano/address.{PaymentCredential, Script}
-use cardano/assets.{AssetName, PolicyId}
+use aiken/interval
+use aiken/math/rational
+use cardano/address.{Script}
+use cardano/assets.{PolicyId, lovelace_of}
 use cardano/transaction.{
   Output, OutputReference, Transaction, find_script_outputs,
 }
+use otypes.{Fund, OsiDatum, OsiRedeemers, Payout}
 use pyth.{PriceUpdate, get_updates}
-use types.{Fund, OsiDatum, OsiRedeemers, Payout}
-
-fn expected_quote_amount(
-  base_amount: Int,
-  price: Int,
-  exponent: Int,
-  base_currency: Int,
-) -> Int {
-  todo
-}
-
-fn expected_for_credential(
-  payees: Pairs<PaymentCredential, Int>,
-  payee_cred: PaymentCredential,
-  price: Int,
-  exponent: Int,
-  base_currency: Int,
-) -> Option<Int> {
-  pairs.get_first(payees, payee_cred)
-    |> option.map(
-        fn(base_amount) {
-          expected_quote_amount(base_amount, price, exponent, base_currency)
-        },
-      )
-}
+use types/u32
+use types/u64
+use utils.{quote_price_multiplier}
 
 /// Oracle-settled Invoice
-validator oracleSettled(base_currency: Int, pyth_policy: PolicyId) {
+validator oracle_settled_invoice(base_currency: Int, pyth_policy: PolicyId) {
   spend(
     datum: Option<OsiDatum>,
     redeemer: OsiRedeemers,
@@ -53,39 +33,53 @@ validator oracleSettled(base_currency: Int, pyth_policy: PolicyId) {
 
       Payout -> {
         expect Some(datum) = datum
-        let OsiDatum { timestamp, payees, quote_token } = datum
+        let OsiDatum { deadline, payees } = datum
 
-        expect [feed1, feed2] = get_updates(pyth_policy, tx)
+        expect [price_update] = get_updates(pyth_policy, tx)
 
-        trace feed1
-        trace feed2
+        expect [feed1, feed2] = price_update.feeds
 
-        // REVIEW
-        // list.all(
-        //   outputs,
-        //   fn(out) {
-        //     let actual =
-        //       assets.quantity_of(
-        //         out.value,
-        //         quote_token.policy_id,
-        //         quote_token.asset_name,
-        //       )
-        //     let payee_cred = out.address.payment_credential
-        //     when
-        //       expected_for_credential(
-        //         payees,
-        //         payee_cred,
-        //         price,
-        //         exponent,
-        //         base_currency,
-        //       )
-        //     is {
-        //       Some(expected) -> actual == expected
-        //       None -> False
-        //     }
-        //   },
-        // )
-        False
+        let base_currency_feed_match =
+          u32.as_int(feed1.feed_id) == base_currency
+
+        let quote_multiplier = quote_price_multiplier(feed1, feed2)
+
+        let feed_time_within_range =
+          tx.validity_range
+            |> interval.contains(u64.as_int(price_update.timestamp_us))
+
+        let payment_before_deadline =
+          tx.validity_range
+            |> interval.is_entirely_before(deadline)
+
+        let payouts_match =
+          payees
+            |> pairs.foldl(
+                True,
+                fn(k, v, r) {
+                  let outputs_value =
+                    outputs
+                      |> list.filter_map(
+                          fn(out) {
+                            if out.address.payment_credential == k {
+                              Some(out.value)
+                            } else {
+                              None
+                            }
+                          },
+                        )
+                      |> list.foldl(
+                          0,
+                          fn(value, accumulator) {
+                            lovelace_of(value) + accumulator
+                          },
+                        )
+                  expect Some(expected_payout) =
+                    rational.div(rational.from_int(v), quote_multiplier)
+                  (outputs_value >= rational.floor(expected_payout))? && r
+                },
+              )
+        payouts_match? && base_currency_feed_match? && feed_time_within_range? && payment_before_deadline?
       }
     }
   }
