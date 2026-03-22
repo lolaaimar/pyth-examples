@@ -1,10 +1,14 @@
 import {
   Address,
+  Effect,
   ScriptHash,
   Transaction,
   UTxO,
 } from "@evolution-sdk/evolution";
-import { getPythScriptHash, getPythState } from "@pythnetwork/pyth-lazer-cardano-js";
+import {
+  getPythScriptHash,
+  getPythState,
+} from "@pythnetwork/pyth-lazer-cardano-js";
 
 import {
   fetchLatestSignedUpdate,
@@ -29,44 +33,45 @@ const validatorUtxo = targetOutRef
       targetOutRef.transactionIdHex,
       targetOutRef.index,
     )
-  : await loadFirstValidatorUtxo(
-      runtime.client,
-      runtime.validator.address,
-    );
+  : await loadFirstValidatorUtxo(runtime.client, runtime.validator.address);
 
 const pythState = await getPythState(
   runtime.pythPolicyId,
   runtime.providerClient,
 );
 const pythWithdrawScriptHash = getPythScriptHash(pythState);
-const pythUpdate = await fetchLatestSignedUpdate(lazerToken, runtime.feedId);
+const pythUpdate = await fetchLatestSignedUpdate(lazerToken, runtime.queryFeedIds);
 
 const now = BigInt(Date.now());
 const loggingEvaluator = {
   evaluate: (
     tx: Transaction.Transaction,
     additionalUtxos: ReadonlyArray<UTxO.UTxO> | undefined,
-  ) => {
-    console.log("Evaluation tx cbor hex:");
-    console.log(Transaction.toCBORHex(tx));
+  ) =>
+    Effect.gen(function* () {
+      console.log("Evaluation tx cbor hex:");
+      console.log(Transaction.toCBORHex(tx));
 
-    if (additionalUtxos && additionalUtxos.length > 0) {
-      console.log("Evaluation additional UTxOs:");
-      console.dir(additionalUtxos.map(UTxO.toOutRefString), {
-        depth: null,
-        colors: true,
-      });
-    }
+      if (additionalUtxos && additionalUtxos.length > 0) {
+        console.log("Evaluation additional UTxOs:");
+        console.dir(additionalUtxos.map(UTxO.toOutRefString), {
+          depth: null,
+          colors: true,
+        });
+      }
 
-    return runtime.providerClient.Effect.evaluateTx(tx);
-  },
+      return yield* runtime.providerClient.Effect.evaluateTx(tx);
+    }),
 } as const;
 
-console.log(`Validator address: ${Address.toBech32(runtime.validator.address)}`);
+console.log(
+  `Validator address: ${Address.toBech32(runtime.validator.address)}`,
+);
 console.log(`Spent validator input: ${UTxO.toOutRefString(validatorUtxo)}`);
 console.log(`Pyth state input: ${UTxO.toOutRefString(pythState)}`);
 console.log(`Pyth withdraw script hash: ${pythWithdrawScriptHash}`);
-console.log(`Feed id: ${runtime.feedId}`);
+console.log(`Primary feed id: ${runtime.feedId}`);
+console.log(`Query feed ids: ${runtime.queryFeedIds.join(", ")}`);
 console.log(`Signed update hex: ${pythUpdate.signedUpdateHex}`);
 console.dir({ parsed: pythUpdate.parsed }, { depth: null, colors: true });
 
@@ -95,13 +100,13 @@ try {
       label: "osi-accept-pyth",
     })
     .build({
-      debug: true,
       evaluator: loggingEvaluator as never,
     })
     .then((built) => built.sign())
-    .then((signed) => signed.submit());
+    // .then((signed) => signed.submit());
 
-  console.log(`Spend tx hash: ${formatTxHash(txHash)}`);
+  console.log("Transaction built and signed successfully.");
+  // console.log(`Spend tx hash: ${formatTxHash(txHash)}`);
 } catch (error) {
   logDetailedError(error);
   throw error;

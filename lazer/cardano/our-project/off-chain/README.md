@@ -11,6 +11,8 @@ Minimal e2e commands:
 ```bash
 bun run create-validator-utxo
 bun run spend-validator-utxo <createTxHash>
+bun run evaluate-ogmios <txCborHex>
+bun run fetch-ada-usdt-update
 ```
 
 You can also pass an explicit out-ref as `<createTxHash>#<index>`.
@@ -21,7 +23,6 @@ Required environment variables:
 - `WALLET_MNEMONIC`
 - `PYTH_POLICY_ID`
 - `LAZER_TOKEN`
-- `FEED_ID` (defaults to `16`)
 - `VALIDATOR_LOVELACE` (defaults to `5000000`)
 - provider config:
   - `PROVIDER_TYPE=blockfrost` with `BLOCKFROST_BASE_URL` and `BLOCKFROST_PROJECT_ID`

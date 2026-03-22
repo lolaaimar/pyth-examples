@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import {
   Address,
   Assets,
+  Bytes,
   Cardano,
   Data,
   ScriptHash,
@@ -24,16 +25,17 @@ import {
   type PriceFeedProperty,
 } from "@pythnetwork/pyth-lazer-sdk";
 
-dotenv.config();
-
 const OFF_CHAIN_DIR = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(OFF_CHAIN_DIR, ".env") });
+
 const PLUTUS_JSON_PATH = join(OFF_CHAIN_DIR, "../on-chain/plutus.json");
 const VALIDATOR_TITLE = "osi_accept_pyth.osi_accept_pyth.spend";
+const ADA_USD_FEED_ID = 16;
+const USDT_USD_FEED_ID = 8;
 
 const DEFAULT_LAZER_PROPERTIES = [
   "price",
   "exponent",
-  "confidence",
   "feedUpdateTimestamp",
 ] as const satisfies readonly PriceFeedProperty[];
 
@@ -61,6 +63,7 @@ export type OsiRuntime = {
   providerClient: ProviderOnlyClient;
   network: NetworkName;
   feedId: number;
+  queryFeedIds: number[];
   pythPolicyId: string;
   fundingLovelace: bigint;
   validator: {
@@ -79,7 +82,8 @@ export type PythSignedUpdate = {
 export async function loadRuntimeFromEnv(): Promise<OsiRuntime> {
   const network = readNetwork();
   const pythPolicyId = readRequiredEnv("PYTH_POLICY_ID");
-  const feedId = readIntEnv("FEED_ID", 16);
+  const feedId = ADA_USD_FEED_ID;
+  const queryFeedIds = [ADA_USD_FEED_ID, USDT_USD_FEED_ID];
   const fundingLovelace = readBigIntEnv("VALIDATOR_LOVELACE", 5_000_000n);
   const providerConfig = readProviderConfig();
   const client = createSigningClientFromEnv(network, providerConfig);
@@ -87,6 +91,7 @@ export async function loadRuntimeFromEnv(): Promise<OsiRuntime> {
   const validator = await loadParameterizedValidator({
     network,
     pythPolicyId,
+    baseAssetId: BigInt(USDT_USD_FEED_ID),
   });
 
   return {
@@ -94,6 +99,7 @@ export async function loadRuntimeFromEnv(): Promise<OsiRuntime> {
     providerClient,
     network,
     feedId,
+    queryFeedIds,
     pythPolicyId,
     fundingLovelace,
     validator,
@@ -181,7 +187,7 @@ export function parseCliOutRef(argument: string | undefined): {
 
 export async function fetchLatestSignedUpdate(
   token: string,
-  feedId: number,
+  feedIds: readonly number[],
 ): Promise<PythSignedUpdate> {
   const client = await PythLazerClient.create({
     token,
@@ -194,7 +200,7 @@ export async function fetchLatestSignedUpdate(
   try {
     const latest = await client.getLatestPrice({
       channel: "fixed_rate@200ms",
-      priceFeedIds: [feedId],
+      priceFeedIds: [...feedIds],
       properties: [...DEFAULT_LAZER_PROPERTIES],
       formats: ["solana"],
       jsonBinaryEncoding: "hex",
@@ -254,9 +260,11 @@ export function makeLovelace(amount: bigint): Assets.Assets {
 async function loadParameterizedValidator({
   network,
   pythPolicyId,
+  baseAssetId,
 }: {
   network: NetworkName;
   pythPolicyId: string;
+  baseAssetId: bigint;
 }) {
   const blueprintRaw = await readFile(PLUTUS_JSON_PATH, "utf8");
   const blueprint = JSON.parse(blueprintRaw) as Blueprint;
@@ -270,9 +278,12 @@ async function loadParameterizedValidator({
 
   const scriptBytesHex =
     Array.isArray(validator.parameters) && validator.parameters.length > 0
-      ? UPLC.applyParamsToScript(validator.compiledCode, [
-          Buffer.from(pythPolicyId, "hex"),
-        ])
+      ? UPLC.applySingleCborEncoding(
+          UPLC.applyParamsToScript(validator.compiledCode, [
+            Buffer.from(pythPolicyId, "hex"),
+            baseAssetId,
+          ]),
+        )
       : validator.compiledCode;
 
   const script = new Cardano.PlutusV3.PlutusV3({
@@ -282,7 +293,8 @@ async function loadParameterizedValidator({
   const scriptHashHex = ScriptHash.toHex(scriptHash);
 
   if (
-    (!Array.isArray(validator.parameters) || validator.parameters.length === 0) &&
+    (!Array.isArray(validator.parameters) ||
+      validator.parameters.length === 0) &&
     validator.hash &&
     validator.hash !== scriptHashHex
   ) {
