@@ -31,6 +31,18 @@ import {
 } from "../osi.ts";
 import type { ParsedFeedPayload } from "@pythnetwork/pyth-lazer-sdk";
 
+const ANSI = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+  red: "\x1b[31m",
+} as const;
+
 const runtime = await loadRuntimeFromEnv();
 const lazerToken = readLazerToken();
 const targetOutRef = parseCliOutRef(process.argv[2]);
@@ -59,11 +71,12 @@ const loggingEvaluator = {
     additionalUtxos: ReadonlyArray<UTxO.UTxO> | undefined,
   ) =>
     Effect.gen(function* () {
-      console.log("Evaluation tx cbor hex:");
+      console.log(`${ANSI.bold}${ANSI.blue}🧪 Evaluation${ANSI.reset}`);
+      console.log(`${ANSI.cyan}CBOR${ANSI.reset}`);
       console.log(Transaction.toCBORHex(tx));
 
       if (additionalUtxos && additionalUtxos.length > 0) {
-        console.log("Evaluation additional UTxOs:");
+        console.log(`${ANSI.cyan}Additional UTxOs${ANSI.reset}`);
         console.dir(additionalUtxos.map(UTxO.toOutRefString), {
           depth: null,
           colors: true,
@@ -74,25 +87,18 @@ const loggingEvaluator = {
     }),
 } as const;
 
+console.log("");
+console.log(`${ANSI.bold}${ANSI.blue}⚙️  OSI PAYOUT CONTEXT${ANSI.reset}`);
 console.log(
-  `Validator address: ${Address.toBech32(runtime.validator.address)}`,
+  `${ANSI.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${ANSI.reset}`,
 );
-console.log(`Spent validator input: ${UTxO.toOutRefString(validatorUtxo)}`);
-console.log(`Pyth state input: ${UTxO.toOutRefString(pythState)}`);
-console.log(`Pyth withdraw script hash: ${pythWithdrawScriptHash}`);
-console.log(`Primary feed id: ${runtime.feedId}`);
-console.log(`Query feed ids: ${runtime.queryFeedIds.join(", ")}`);
-console.log(`Signed update hex: ${pythUpdate.signedUpdateHex}`);
-console.dir({ parsed: pythUpdate.parsed }, { depth: null, colors: true });
-console.dir(
-  {
-    paymentOutputs: paymentOutputs.map(({ address, lovelace }) => ({
-      address: Address.toBech32(address),
-      lovelace: lovelace.toString(),
-    })),
-  },
-  { depth: null, colors: true },
-);
+console.log(`🏛️  Validator   ${Address.toBech32(runtime.validator.address)}`);
+console.log(`📦 Input UTxO   ${UTxO.toOutRefString(validatorUtxo)}`);
+console.log(`🔐 Pyth State   ${UTxO.toOutRefString(pythState)}`);
+console.log(`🧾 Withdraw SH  ${pythWithdrawScriptHash}`);
+console.log(`📈 Feed IDs     ${runtime.feedId} (primary) | ${runtime.queryFeedIds.join(", ")}`);
+console.log(`🛰️ Update Hex   ${pythUpdate.signedUpdateHex}`);
+console.log("");
 
 try {
   let builder = runtime.client
@@ -137,15 +143,40 @@ try {
     });
   }
 
+  const remainingLovelace =
+    validatorUtxo.assets.lovelace > totalPaymentLvc
+      ? validatorUtxo.assets.lovelace - totalPaymentLvc
+      : 0n;
+
   const txHash = await builder
     .build({
-      evaluator: loggingEvaluator as never,
     })
     .then((built) => built.sign())
     .then((signed) => signed.submit());
 
-  console.log(`Spend tx hash: ${formatTxHash(txHash)}`);
+  const spendTxHash = formatTxHash(txHash);
+
+  console.log("");
+  console.log(`${ANSI.bold}${ANSI.green}✅💸 OSI PAYOUT SUCCESS${ANSI.reset}`);
+  console.log(
+    `${ANSI.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${ANSI.reset}`,
+  );
+  console.log(`${ANSI.cyan}🔗 Tx hash${ANSI.reset}      ${ANSI.bold}${spendTxHash}${ANSI.reset}`);
+  console.log(`${ANSI.cyan}📤 Paid out${ANSI.reset}     ${formatLovelace(totalPaymentLvc)}`);
+  console.log(`${ANSI.cyan}🏦 Remaining${ANSI.reset}    ${formatLovelace(remainingLovelace)}`);
+  console.log(
+    `${ANSI.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${ANSI.reset}`,
+  );
 } catch (error) {
+  if (error instanceof Error) {
+    console.error(
+      `${ANSI.bold}${ANSI.red}❌ Oops:${ANSI.reset} ${ANSI.red}${error.message}${ANSI.reset}`,
+    );
+  } else {
+    console.error(
+      `${ANSI.bold}${ANSI.red}❌ Oops:${ANSI.reset} ${ANSI.red}Unknown error occurred${ANSI.reset}`,
+    );
+  }
   logDetailedError(error);
   throw error;
 }
@@ -217,4 +248,13 @@ function computeLovelacePayout(
 
   const scale = 10n ** BigInt(baseExponent - quoteExponent);
   return (quoteAmount * quotePrice) / (basePrice * scale);
+}
+
+function formatLovelace(value: bigint): string {
+  const adaWhole = value / 1_000_000n;
+  const adaFraction = value % 1_000_000n;
+
+  return `${value.toLocaleString()} lovelace (${adaWhole.toLocaleString()}.${adaFraction
+    .toString()
+    .padStart(6, "0")} ADA)`;
 }

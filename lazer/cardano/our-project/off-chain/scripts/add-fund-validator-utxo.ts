@@ -21,6 +21,18 @@ import {
 
 const runtime = await loadRuntimeFromEnv();
 
+const ANSI = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+  red: "\x1b[31m",
+} as const;
+
 // Parse CLI arguments
 const additionalFundingLovelace = BigInt(process.argv[2] ?? "0");
 const targetOutRef = parseCliOutRef(process.argv[3]);
@@ -85,24 +97,49 @@ try {
     .then((built) => built.sign())
     .then((signed: any) => signed.submit());
 
-  // Log transaction details
-  console.log(`Wallet address: ${Address.toBech32(walletAddress)}`);
-  console.log(`Validator address: ${Address.toBech32(runtime.validator.address)}`);
-  console.log(`Spent validator input: ${UTxO.toOutRefString(validatorUtxo)}`);
+  const submittedTxHash = formatTxHash(txHash);
+
+  console.log("");
   console.log(
-    `Previous validator lovelace: ${currentValidatorLovelace.toString()}`
+    `${ANSI.bold}${ANSI.green}✅💸 OSI FUND SUCCESS${ANSI.reset}`,
   );
-  console.log(`Added lovelace: ${additionalFundingLovelace.toString()}`);
   console.log(
-    `New validator lovelace: ${newValidatorLovelace.toString()}`
+    `${ANSI.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${ANSI.reset}`,
   );
-  console.log(`Fund tx hash: ${formatTxHash(txHash)}`);
-  console.log(`Verify with: bun run spend-validator-utxo ${formatTxHash(txHash)}`);
+  console.log(
+    `${ANSI.cyan}🔗 Tx hash${ANSI.reset}            ${ANSI.bold}${submittedTxHash}${ANSI.reset}`,
+  );
+  console.log(
+    `${ANSI.cyan}📦 Spent script UTxO${ANSI.reset}  ${UTxO.toOutRefString(validatorUtxo)}`,
+  );
+  console.log("");
+  console.log(`${ANSI.bold}${ANSI.blue}🏷️  Addresses${ANSI.reset}`);
+  console.log(`👛 Wallet      ${Address.toBech32(walletAddress)}`);
+  console.log(`🏛️  Validator   ${Address.toBech32(runtime.validator.address)}`);
+  console.log("");
+  console.log(`${ANSI.bold}${ANSI.magenta}📊 Value Changes${ANSI.reset}`);
+  console.log(`• Previous   ${formatLovelace(currentValidatorLovelace)}`);
+  console.log(
+    `• Added      ${ANSI.green}+${formatLovelace(additionalFundingLovelace)}${ANSI.reset}`,
+  );
+  console.log(
+    `• New Total  ${ANSI.bold}${ANSI.yellow}${formatLovelace(newValidatorLovelace)}${ANSI.reset}`,
+  );
+  console.log("");
+  console.log(`${ANSI.bold}${ANSI.yellow}🚀 Next${ANSI.reset}`);
+  console.log(`bun run spend-validator-utxo ${submittedTxHash}`);
+  console.log(
+    `${ANSI.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${ANSI.reset}`,
+  );
 } catch (error) {
   if (error instanceof Error) {
-    console.error(`Error: ${error.message}`);
+    console.error(
+      `${ANSI.bold}${ANSI.red}❌ Oops:${ANSI.reset} ${ANSI.red}${error.message}${ANSI.reset}`,
+    );
   } else {
-    console.error("Unknown error occurred");
+    console.error(
+      `${ANSI.bold}${ANSI.red}❌ Oops:${ANSI.reset} ${ANSI.red}Unknown error occurred${ANSI.reset}`,
+    );
   }
   throw error;
 }
@@ -115,4 +152,13 @@ function decodeValidatorDatum(validatorUtxo: UTxO.UTxO) {
   }
 
   return decodeOsiDatumData(datumOption.data as Data.Constr);
+}
+
+function formatLovelace(value: bigint): string {
+  const adaWhole = value / 1_000_000n;
+  const adaFraction = value % 1_000_000n;
+
+  return `${value.toLocaleString()} lovelace (${adaWhole.toLocaleString()}.${adaFraction
+    .toString()
+    .padStart(6, "0")} ADA)`;
 }

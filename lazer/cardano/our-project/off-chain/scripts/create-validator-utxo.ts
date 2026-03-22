@@ -7,6 +7,16 @@ import {
   makeVerificationKeyCredential,
 } from "../osi.ts";
 
+const ANSI = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  cyan: "\x1b[36m",
+} as const;
+
 const runtime = await loadRuntimeFromEnv();
 const walletAddress = await runtime.client.address();
 const validatorAddressBech32 = Address.toBech32(runtime.validator.address);
@@ -36,11 +46,31 @@ const txHash = await runtime.client
   .then((built) => built.sign())
   .then((signed) => signed.submit());
 
-console.log(`Wallet address: ${Address.toBech32(walletAddress)}`);
-console.log(`Validator address: ${validatorAddressBech32}`);
-console.log(`Funded lovelace: ${runtime.fundingLovelace.toString()}`);
-console.log(`Datum deadline: ${datum.deadline.toString()}`);
-console.log(`Create tx hash: ${formatTxHash(txHash)}`);
+const createdTxHash = formatTxHash(txHash);
+
+console.log("");
+console.log(`${ANSI.bold}${ANSI.green}🆕💰 OSI CREATED${ANSI.reset}`);
 console.log(
-  `Verify with: bun run spend-validator-utxo ${formatTxHash(txHash)}`,
+  `${ANSI.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${ANSI.reset}`,
 );
+console.log(`${ANSI.cyan}🔗 Tx hash${ANSI.reset}      ${ANSI.bold}${createdTxHash}${ANSI.reset}`);
+console.log(`${ANSI.cyan}👛 Wallet${ANSI.reset}       ${Address.toBech32(walletAddress)}`);
+console.log(`${ANSI.cyan}🏛️  Validator${ANSI.reset}    ${validatorAddressBech32}`);
+console.log(`${ANSI.cyan}💵 Funded${ANSI.reset}       ${formatLovelace(runtime.fundingLovelace)}`);
+console.log(`${ANSI.cyan}⏰ Deadline${ANSI.reset}     ${datum.deadline.toString()}`);
+console.log(`${ANSI.cyan}👥 Payees${ANSI.reset}       ${payees.length.toString()}`);
+console.log("");
+console.log(`${ANSI.bold}${ANSI.yellow}🚀 Next${ANSI.reset}`);
+console.log(`bun run spend-validator-utxo ${createdTxHash}`);
+console.log(
+  `${ANSI.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${ANSI.reset}`,
+);
+
+function formatLovelace(value: bigint): string {
+  const adaWhole = value / 1_000_000n;
+  const adaFraction = value % 1_000_000n;
+
+  return `${value.toLocaleString()} lovelace (${adaWhole.toLocaleString()}.${adaFraction
+    .toString()
+    .padStart(6, "0")} ADA)`;
+}
