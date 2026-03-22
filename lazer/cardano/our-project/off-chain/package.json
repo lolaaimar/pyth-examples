@@ -8,5 +8,9 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@evolution-sdk/evolution": "^0.3.30",
+    "@pythnetwork/pyth-lazer-sdk": "^6.2.1"
   }
 }
