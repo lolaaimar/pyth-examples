@@ -2,6 +2,8 @@
 
 Oracle-Settled Invoice is a Cardano escrow that locks one asset and settles a liability indexed to another using Pyth prices.
 
+This project is a practical blueprint for building oracle-driven settlement flows on Cardano with Pyth. It combines Aiken on-chain validators with a typeScript off-chain client, so you can go from contract logic to real transaction execution with minimal setup.
+
 ## Quick Start
 
 ### 1. Build contracts
