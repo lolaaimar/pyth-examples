@@ -88,3 +88,35 @@ validator oracle_settled_invoice(base_currency: Int, pyth_policy: PolicyId) {
     fail
   }
 }
+
+fn trace_if_false(condition: Bool, message: String) -> Bool {
+  if condition {
+    True
+  } else {
+    fail message
+  }
+}
+
+fn payouts_match_outputs(
+  payees: Pairs<Credential, Int>,
+  outputs: List<Output>,
+  quote_multiplier: rational.Rational,
+) -> Bool {
+  when payees is {
+    [] -> True
+    [Pair(payee, quote_amount), ..rest_payees] ->
+      when outputs is {
+        [] -> False
+        [Output { address, value, .. }, ..rest_outputs] -> {
+          expect Some(expected_payout) =
+            rational.div(rational.from_int(quote_amount), quote_multiplier)
+
+          and {
+            address.payment_credential == payee,
+            lovelace_of(value) >= rational.floor(expected_payout),
+            payouts_match_outputs(rest_payees, rest_outputs, quote_multiplier),
+          }
+        }
+      }
+  }
+}
