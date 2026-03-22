@@ -6,10 +6,25 @@ To install dependencies:
 bun install
 ```
 
-To run:
+Minimal e2e commands:
 
 ```bash
-bun run index.ts
+bun run create-validator-utxo
+bun run spend-validator-utxo <createTxHash>
 ```
 
-This project was created using `bun init` in bun v1.3.11. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+You can also pass an explicit out-ref as `<createTxHash>#<index>`.
+
+Required environment variables:
+
+- `NETWORK` = `preprod`, `preview`, or `mainnet`
+- `WALLET_MNEMONIC`
+- `PYTH_POLICY_ID`
+- `LAZER_TOKEN`
+- `FEED_ID` (defaults to `16`)
+- `VALIDATOR_LOVELACE` (defaults to `5000000`)
+- provider config:
+  - `PROVIDER_TYPE=blockfrost` with `BLOCKFROST_BASE_URL` and `BLOCKFROST_PROJECT_ID`
+  - or `PROVIDER_TYPE=kupmios` with `KUPO_URL` and `OGMIOS_URL`
+  - or `PROVIDER_TYPE=maestro` with `MAESTRO_BASE_URL` and `MAESTRO_API_KEY`
+  - or `PROVIDER_TYPE=koios` with `KOIOS_BASE_URL` and optional `KOIOS_TOKEN`

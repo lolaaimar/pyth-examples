@@ -1,8 +1,12 @@
 {
   "name": "off-chain",
-  "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "create-validator-utxo": "bun run scripts/create-validator-utxo.ts",
+    "spend-validator-utxo": "bun run scripts/spend-validator-utxo.ts",
+    "typecheck": "bun x tsc --noEmit"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -11,6 +15,7 @@
   },
   "dependencies": {
     "@evolution-sdk/evolution": "^0.3.30",
+    "@pythnetwork/pyth-lazer-cardano-js": "^0.1.0",
     "@pythnetwork/pyth-lazer-sdk": "^6.2.1",
     "dotenv": "^17.3.1"
   }
