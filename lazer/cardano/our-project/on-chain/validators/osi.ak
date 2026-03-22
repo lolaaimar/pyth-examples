@@ -1,20 +1,18 @@
-use aiken/collection/list
-use aiken/collection/pairs
 use aiken/interval
 use aiken/math/rational
-use cardano/address.{Script}
+use cardano/address.{Credential, Script}
 use cardano/assets.{PolicyId, lovelace_of}
 use cardano/transaction.{
   Output, OutputReference, Transaction, find_script_outputs,
 }
 use otypes.{Fund, OsiDatum, OsiRedeemers, Payout}
-use pyth.{PriceUpdate, get_updates}
-use types/u32
+use pyth.{Feed, PriceUpdate, get_updates}
+use types/u32.{U32, from_int}
 use types/u64
 use utils.{quote_price_multiplier}
 
 /// Oracle-settled Invoice
-validator oracle_settled_invoice(base_currency: Int, pyth_policy: PolicyId) {
+validator oracle_settled_invoice(pyth_policy: PolicyId, base_currency: Int) {
   spend(
     datum: Option<OsiDatum>,
     redeemer: OsiRedeemers,
@@ -37,49 +35,56 @@ validator oracle_settled_invoice(base_currency: Int, pyth_policy: PolicyId) {
 
         expect [price_update] = get_updates(pyth_policy, tx)
 
-        expect [feed1, feed2] = price_update.feeds
+        expect [quote_feed, base_feed] = price_update.feeds
 
-        let base_currency_feed_match =
-          u32.as_int(feed1.feed_id) == base_currency
+        expect Feed {
+          feed_id: ada_price_feed_id,
+          price: Some(Some(quote_price)),
+          exponent: Some(quote_exponent),
+          feed_update_timestamp: Some(Some(timestamp_1)),
+          ..
+        } = quote_feed
 
-        let quote_multiplier = quote_price_multiplier(feed1, feed2)
+        expect Feed {
+          feed_id: quote_feed_id,
+          price: Some(Some(base_price)),
+          exponent: Some(base_exponent),
+          feed_update_timestamp: Some(Some(timestamp_2)),
+          ..
+        } = base_feed
 
-        let feed_time_within_range =
-          tx.validity_range
-            |> interval.contains(u64.as_int(price_update.timestamp_us))
+        let quote_multiplier =
+          quote_price_multiplier(
+            base_price,
+            base_exponent,
+            quote_price,
+            quote_exponent,
+          )
 
-        let payment_before_deadline =
-          tx.validity_range
-            |> interval.is_entirely_before(deadline)
-
-        let payouts_match =
-          payees
-            |> pairs.foldl(
-                True,
-                fn(k, v, r) {
-                  let outputs_value =
-                    outputs
-                      |> list.filter_map(
-                          fn(out) {
-                            if out.address.payment_credential == k {
-                              Some(out.value)
-                            } else {
-                              None
-                            }
-                          },
-                        )
-                      |> list.foldl(
-                          0,
-                          fn(value, accumulator) {
-                            lovelace_of(value) + accumulator
-                          },
-                        )
-                  expect Some(expected_payout) =
-                    rational.div(rational.from_int(v), quote_multiplier)
-                  (outputs_value >= rational.floor(expected_payout))? && r
-                },
-              )
-        payouts_match? && base_currency_feed_match? && feed_time_within_range? && payment_before_deadline?
+        and {
+          // Base currency feed must match the expected base asset id
+          trace_if_false(
+            (quote_feed_id == from_int(base_currency))?,
+            @"Base currency feed does not match expected base asset id",
+          ),
+          // Price feed must be updated within the transaction's validity range
+          trace_if_false(
+            (tx.validity_range
+              |> interval.contains(u64.as_int(price_update.timestamp_us)))?,
+            @"Price feed not updated within transaction validity range",
+          ),
+          // Payment must be made before the deadline
+          trace_if_false(
+            (tx.validity_range
+              |> interval.is_entirely_before(deadline))?,
+            @"Payment not made before the deadline",
+          ),
+          // Payouts must be made to the correct addresses with the correct amounts
+          trace_if_false(
+            payouts_match_outputs(payees, outputs, quote_multiplier)?,
+            @"Payouts do not match expected values based on the price feed",
+          ),
+        }
       }
     }
   }
