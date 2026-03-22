@@ -10,12 +10,31 @@ Minimal e2e commands:
 
 ```bash
 bun run create-validator-utxo
+bun run add-fund-validator-utxo <lovelace> [outRef]
 bun run spend-validator-utxo <createTxHash>
 bun run evaluate-ogmios <txCborHex>
 bun run fetch-ada-usdt-update
 ```
 
 You can also pass an explicit out-ref as `<createTxHash>#<index>`.
+
+### Fund Operation
+
+Add funds to an existing OSI UTxO while preserving the deadline and payees:
+
+```bash
+# Add 1000000 lovelace to the first validator UTxO
+bun run add-fund-validator-utxo 1000000
+
+# Add 2000000 lovelace to a specific UTxO
+bun run add-fund-validator-utxo 2000000 <txHash>#<index>
+```
+
+The Fund operation:
+- Takes an existing OSI UTxO from the script address
+- Adds additional ADA (lovelace) from your wallet
+- Returns the combined funds to the same script address with the original datum unchanged
+- Preserves the deadline and payees for later Payout operations
 
 Required environment variables:
 

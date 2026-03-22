@@ -1,15 +1,24 @@
 use aiken/interval
 use aiken/math/rational
-use cardano/address.{Credential, Script}
+use cardano/address.{PaymentCredential, Script}
 use cardano/assets.{PolicyId, lovelace_of}
 use cardano/transaction.{
-  Output, OutputReference, Transaction, find_script_outputs,
+  Output, OutputReference, Transaction, find_script_outputs, InlineDatum
 }
-use otypes.{Fund, OsiDatum, OsiRedeemers, Payout}
 use pyth.{Feed, PriceUpdate, get_updates}
 use types/u32.{U32, from_int}
 use types/u64
 use utils.{quote_price_multiplier}
+
+pub type OsiDatum {
+  deadline: Int,
+  payees: Pairs<PaymentCredential, Int>,
+}
+
+pub type OsiRedeemers {
+  Fund
+  Payout
+}
 
 /// Oracle-settled Invoice
 validator oracle_settled_invoice(pyth_policy: PolicyId, base_currency: Int) {
@@ -23,15 +32,27 @@ validator oracle_settled_invoice(pyth_policy: PolicyId, base_currency: Int) {
 
     when redeemer is {
       Fund -> {
+        expect Some(input_datum) = datum
         let in = inputs |> transaction.resolve_input(utxo)
         expect Script(script_hash) = in.address.payment_credential
         expect [out] = find_script_outputs(outputs, script_hash)
-        assets.match(in.value, out.value, <=)
+
+        // Verify that the datum is preserved in the output
+        expect InlineDatum(data) = out.datum
+        expect out_datum: OsiDatum = data
+
+        and {
+          input_datum == out_datum,
+          lovelace_of(out.value) >= lovelace_of(in.value),
+        }
       }
 
       Payout -> {
         expect Some(datum) = datum
         let OsiDatum { deadline, payees } = datum
+        let in = inputs |> transaction.resolve_input(utxo)
+        expect Script(script_hash) = in.address.payment_credential
+        let spendable_lovelace = lovelace_of(in.value) - tx.fee
 
         expect [price_update] = get_updates(pyth_policy, tx)
 
@@ -70,8 +91,8 @@ validator oracle_settled_invoice(pyth_policy: PolicyId, base_currency: Int) {
           // Price feed must be updated within the transaction's validity range
           trace_if_false(
             (tx.validity_range
-              |> interval.contains(u64.as_int(price_update.timestamp_us)))?,
-            @"Price feed not updated within transaction validity range",
+              |> interval.contains(u64.as_int(price_update.timestamp_us) / 1000))?,
+            @"Price feed not updated within transaction validity range"
           ),
           // Payment must be made before the deadline
           trace_if_false(
@@ -79,11 +100,17 @@ validator oracle_settled_invoice(pyth_policy: PolicyId, base_currency: Int) {
               |> interval.is_entirely_before(deadline))?,
             @"Payment not made before the deadline",
           ),
-          // Payouts must be made to the correct addresses with the correct amounts
+          // Payouts must be made in datum order, and any remainder must stay in the script
           trace_if_false(
-            payouts_match_outputs(payees, outputs, quote_multiplier)?,
-            @"Payouts do not match expected values based on the price feed",
-          ),
+            payouts_and_remaining_match(
+              payees,
+              outputs,
+              quote_multiplier,
+              Script(script_hash),
+              spendable_lovelace,
+            )?,
+            @"Payout outputs or remaining script funds do not match expected values"
+          )
         }
       }
     }
@@ -102,24 +129,46 @@ fn trace_if_false(condition: Bool, message: String) -> Bool {
   }
 }
 
-fn payouts_match_outputs(
-  payees: Pairs<Credential, Int>,
+fn payouts_and_remaining_match(
+  payees: Pairs<PaymentCredential, Int>,
   outputs: List<Output>,
   quote_multiplier: rational.Rational,
+  script_credential: PaymentCredential,
+  remaining_input_lovelace: Int,
 ) -> Bool {
   when payees is {
-    [] -> True
+    [] ->
+      if remaining_input_lovelace <= 0 {
+        True
+      } else {
+        when outputs is {
+          [Output { address, value, .. }, ..] ->
+            and {
+              address.payment_credential == script_credential,
+              lovelace_of(value) >= remaining_input_lovelace,
+            }
+          [] -> False
+        }
+      }
     [Pair(payee, quote_amount), ..rest_payees] ->
       when outputs is {
         [] -> False
         [Output { address, value, .. }, ..rest_outputs] -> {
           expect Some(expected_payout) =
             rational.div(rational.from_int(quote_amount), quote_multiplier)
+          let paid_lovelace = lovelace_of(value)
 
           and {
             address.payment_credential == payee,
-            lovelace_of(value) >= rational.floor(expected_payout),
-            payouts_match_outputs(rest_payees, rest_outputs, quote_multiplier),
+            paid_lovelace >= rational.floor(expected_payout),
+            paid_lovelace <= remaining_input_lovelace,
+            payouts_and_remaining_match(
+              rest_payees,
+              rest_outputs,
+              quote_multiplier,
+              script_credential,
+              remaining_input_lovelace - paid_lovelace,
+            ),
           }
         }
       }

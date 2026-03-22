@@ -3,6 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "add-fund-validator-utxo": "bun run scripts/add-fund-validator-utxo.ts",
     "create-validator-utxo": "bun run scripts/create-validator-utxo.ts",
     "evaluate-ogmios": "bun run scripts/evaluate-ogmios.ts",
     "fetch-ada-usdt-update": "bun run scripts/fetch-ada-usdt-update.ts",

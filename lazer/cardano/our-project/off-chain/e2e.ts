@@ -7,7 +7,6 @@ import dotenv from "dotenv";
 import {
   Address,
   Assets,
-  Bytes,
   Cardano,
   Data,
   ScriptHash,
@@ -29,7 +28,7 @@ const OFF_CHAIN_DIR = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(OFF_CHAIN_DIR, ".env") });
 
 const PLUTUS_JSON_PATH = join(OFF_CHAIN_DIR, "../on-chain/plutus.json");
-const VALIDATOR_TITLE = "osi_accept_pyth.osi_accept_pyth.spend";
+const VALIDATOR_TITLE = "osi.oracle_settled_invoice.spend";
 const ADA_USD_FEED_ID = 16;
 const USDT_USD_FEED_ID = 8;
 
@@ -84,7 +83,7 @@ export async function loadRuntimeFromEnv(): Promise<OsiRuntime> {
   const pythPolicyId = readRequiredEnv("PYTH_POLICY_ID");
   const feedId = ADA_USD_FEED_ID;
   const queryFeedIds = [ADA_USD_FEED_ID, USDT_USD_FEED_ID];
-  const fundingLovelace = readBigIntEnv("VALIDATOR_LOVELACE", 5_000_000n);
+  const fundingLovelace = 2000_000_000n;
   const providerConfig = readProviderConfig();
   const client = createSigningClientFromEnv(network, providerConfig);
   const providerClient = createProviderOnlyClient(network, providerConfig);
@@ -221,10 +220,6 @@ export async function fetchLatestSignedUpdate(
   } finally {
     client.shutdown();
   }
-}
-
-export function makeFeedRedeemer(feedId: number): Data.Data {
-  return Data.int(BigInt(feedId));
 }
 
 export function makeWithdrawRedeemer(update: Buffer): Data.Data {
@@ -421,11 +416,6 @@ function readIntEnv(name: string, fallback: number): number {
   }
 
   return value;
-}
-
-function readBigIntEnv(name: string, fallback: bigint): bigint {
-  const raw = process.env[name]?.trim();
-  return raw ? BigInt(raw) : fallback;
 }
 
 function normalizeError(error: unknown): unknown {
